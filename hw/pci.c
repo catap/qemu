@@ -31,7 +31,7 @@
 #include "loader.h"
 #include "range.h"
 #include "qmp-commands.h"
-
+int glob_e1000_int=0;
 //#define DEBUG_PCI
 #ifdef DEBUG_PCI
 # define PCI_DPRINTF(format, ...)       printf(format, ## __VA_ARGS__)
@@ -136,7 +136,7 @@ int pci_bus_get_irq_level(PCIBus *bus, int irq_num)
 /* Update interrupt status bit in config space on interrupt
  * state change. */
 static void pci_update_irq_status(PCIDevice *dev)
-{
+{      // fprintf(stderr,"\n interrupt stat. change in pci.c");
     if (dev->irq_state) {
         dev->config[PCI_STATUS] |= PCI_STATUS_INTERRUPT;
     } else {
@@ -1025,17 +1025,16 @@ static void pci_update_irq_disabled(PCIDevice *d, int was_irq_disabled)
 
 uint32_t pci_default_read_config(PCIDevice *d,
                                  uint32_t address, int len)
-{
-    uint32_t val = 0;
-
+{ int just_a=0;
+    uint32_t val = 0; 
     memcpy(&val, d->config + address, len);
+    last:
     return le32_to_cpu(val);
 }
 
 void pci_default_write_config(PCIDevice *d, uint32_t addr, uint32_t val, int l)
 {
     int i, was_irq_disabled = pci_irq_disabled(d);
-
     for (i = 0; i < l; val >>= 8, ++i) {
         uint8_t wmask = d->wmask[addr + i];
         uint8_t w1cmask = d->w1cmask[addr + i];
@@ -1061,15 +1060,16 @@ static void pci_set_irq(void *opaque, int irq_num, int level)
 {
     PCIDevice *pci_dev = opaque;
     int change;
-
+  //   fprintf(stderr,"\n pci set irq 1 \n");
     change = level - pci_irq_state(pci_dev, irq_num);
     if (!change)
         return;
-
+    glob_e1000_int=1;
     pci_set_irq_state(pci_dev, irq_num, level);
     pci_update_irq_status(pci_dev);
-    if (pci_irq_disabled(pci_dev))
-        return;
+   // if (pci_irq_disabled(pci_dev))
+     //  return;
+   // fprintf(stderr,"\n pci_irq");//commenetd by ayaz
     pci_change_irq_level(pci_dev, irq_num, change);
 }
 

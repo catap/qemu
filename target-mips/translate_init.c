@@ -87,6 +87,7 @@ struct mips_def_t {
     int32_t CP0_SRSConf4_rw_bitmask;
     int32_t CP0_SRSConf4;
     int insn_flags;
+    target_ulong CP0_CvmCtl, CP0_CvmMemCtl,CP0_CvmCount, CP0_ICacheErr;
     enum mips_mmu_types mmu_type;
 };
 
@@ -449,6 +450,64 @@ static const mips_def_t mips_defs[] =
         .PABITS = 36,
         .insn_flags = CPU_MIPS64R2 | ASE_MIPS3D,
         .mmu_type = MMU_TYPE_R4000,
+    },
+
+    {
+                /* XXX: We will add some more features related to
+                   Octeon's coprocessors */
+                .name = "octeon",
+                .CP0_PRid = 0xd0408,
+                .CP0_Config0 = MIPS_CONFIG0 | (0x1 << CP0C0_AR) | (0x2 << CP0C0_AT) |
+                (MMU_TYPE_R4000 << CP0C0_MT),
+                .CP0_Config1 = MIPS_CONFIG1 | (63 << CP0C1_MMU) |
+                (2 << CP0C1_IS) | (4 << CP0C1_IL) | (3 << CP0C1_IA) |
+                (2 << CP0C1_DS) | (4 << CP0C1_DL) | (3 << CP0C1_DA) |
+                (1 << CP0C1_PC) | (1 << CP0C1_WR) | (1 << CP0C1_EP),
+                .CP0_Config2 = MIPS_CONFIG2,
+                .CP0_Config3 = MIPS_CONFIG3 | (1 << CP0C3_LPA),
+                .CP0_LLAddr_rw_bitmask = 0,
+                .CP0_LLAddr_shift = 0,
+                .SYNCI_Step = 32,
+                .CCRes = 2,
+                .CP0_Status_rw_bitmask = 0x36FBFFFF,
+                .CP1_fcr0 = (1 << FCR0_F64) | (1 << FCR0_3D) | (1 << FCR0_PS) |
+                (1 << FCR0_L) | (1 << FCR0_W) | (1 << FCR0_D) |
+                (1 << FCR0_S) | (0x00 << FCR0_PRID) | (0x0 << FCR0_REV),
+                .SEGBITS = 49,
+                .PABITS = 49,
+                .CP0_CvmCtl = 2952807408,
+                .CP0_CvmMemCtl = 46104,
+		.CP0_ICacheErr = 0x007f7f0000000000,
+                .insn_flags = CPU_OCTEON | ASE_MIPS3D,
+                .mmu_type = MMU_TYPE_R4000,
+        },
+
+
+    {
+        /* XXX: We will add some more features related to
+           Octeon's coprocessors */
+        .name = "octeon",
+        .CP0_PRid = 0x0d30,
+        .CP0_Config0 = MIPS_CONFIG0 | (0x1 << CP0C0_AR) | (0x2 << CP0C0_AT) |
+                       (MMU_TYPE_R4000 << CP0C0_MT),
+        .CP0_Config1 = MIPS_CONFIG1 | (63 << CP0C1_MMU) |
+                       (2 << CP0C1_IS) | (4 << CP0C1_IL) | (3 << CP0C1_IA) |
+                       (2 << CP0C1_DS) | (4 << CP0C1_DL) | (3 << CP0C1_DA) |
+                       (1 << CP0C1_PC) | (1 << CP0C1_WR) | (1 << CP0C1_EP),
+         .CP0_Config2 = MIPS_CONFIG2,
+         .CP0_Config3 = MIPS_CONFIG3 | (1 << CP0C3_LPA),
+         .CP0_LLAddr_rw_bitmask = 0,
+         .CP0_LLAddr_shift = 0,
+         .SYNCI_Step = 32,
+         .CCRes = 2,
+         .CP0_Status_rw_bitmask = 0x36FBFFFF,
+         .CP1_fcr0 = (1 << FCR0_F64) | (1 << FCR0_3D) | (1 << FCR0_PS) |
+                     (1 << FCR0_L) | (1 << FCR0_W) | (1 << FCR0_D) |
+                     (1 << FCR0_S) | (0x00 << FCR0_PRID) | (0x0 << FCR0_REV),
+         .SEGBITS = 49,
+         .PABITS = 49,
+         .insn_flags = CPU_OCTEON | ASE_MIPS3D,
+         .mmu_type = MMU_TYPE_R4000,
     },
     {
         .name = "Loongson-2E",

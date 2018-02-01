@@ -23,9 +23,9 @@
 #include "hw.h"
 #include "mips_cpudevs.h"
 #include "qemu-timer.h"
-
+int counter_timer_irq=0;
 #define TIMER_FREQ	100 * 1000 * 1000
-
+int glob_timer_int=0;
 /* XXX: do not use a global */
 uint32_t cpu_mips_get_random (CPUState *env)
 {
@@ -61,8 +61,16 @@ static void cpu_mips_timer_expire(CPUState *env)
     if (env->insn_flags & ISA_MIPS32R2) {
         env->CP0_Cause |= 1 << CP0Ca_TI;
     }
-    qemu_irq_raise(env->irq[(env->CP0_IntCtl >> CP0IntCtl_IPTI) & 0x7]);
-}
+  // fprintf(stderr,"\n timer_expeire_irq:%d \n");
+    glob_timer_int=1;
+   // if(counter_timer_irq < 1)
+   // counter_timer_irq++;
+     // printf("\n timer:irq:%d \n",counter_timer_irq);
+    //else{
+   // counter_timer_irq=0;
+    	qemu_irq_raise(env->irq[(env->CP0_IntCtl >> CP0IntCtl_IPTI) & 0x7]);  //commented by aya
+    //}
+    }
 
 uint32_t cpu_mips_get_count (CPUState *env)
 {

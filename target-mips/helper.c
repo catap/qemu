@@ -103,6 +103,7 @@ static int get_physical_address (CPUState *env, target_phys_addr_t *physical,
                                 int *prot, target_ulong address,
                                 int rw, int access_type)
 {
+   int sam=0; 
     /* User mode can only access useg/xuseg */
     int user_mode = (env->hflags & MIPS_HFLAG_MODE) == MIPS_HFLAG_UM;
     int supervisor_mode = (env->hflags & MIPS_HFLAG_MODE) == MIPS_HFLAG_SM;
@@ -111,6 +112,11 @@ static int get_physical_address (CPUState *env, target_phys_addr_t *physical,
     int UX = (env->CP0_Status & (1 << CP0St_UX)) != 0;
     int SX = (env->CP0_Status & (1 << CP0St_SX)) != 0;
     int KX = (env->CP0_Status & (1 << CP0St_KX)) != 0;
+
+    //One of CvmMemCtl bit tells that is CvmMemCtlSegment is enabled or not
+    target_ulong CvmMemCtl = 0x000000000100;
+
+    CvmMemCtl = CvmMemCtl & env->CP0_CvmMemCtl;
 #endif
     int ret = TLBRET_MATCH;
 
@@ -187,8 +193,45 @@ static int get_physical_address (CPUState *env, target_phys_addr_t *physical,
         /* kseg3 */
         /* XXX: debug segment is not emulated */
         if (kernel_mode) {
-            ret = env->tlb->map_address(env, physical, prot, address, rw, access_type);
+		if(CvmMemCtl == 0x000000000100){
+		
+
+					{
+	    		//for cvmmemseg, virtual address == physical address for emulation purposes
+	    		//this is a hack. otherwise actual processor maps this region in DCACHE
+	    		//
+	    		//fprintf(stderr,"cvmseg is accessed\n");
+              		 // fprintf(stderr,"\n ...............Kernel Hack in place for CVMSEG=%lx...........\n",(unsigned long)address);
+			//*physical=address&0x000000000;
+
+			*physical=(address&0x510000000)+sam;
+			sam=sam+1;			
+
+	  		*prot = PAGE_READ | PAGE_WRITE;
+	    	
+			}
         } else {
+
+			ret = env->tlb->map_address(env, physical, prot, address, rw, access_type);
+
+		}//end of else
+
+        }
+/*Following hack is for user mode -- Written by Nouman*/
+
+	 else if ((address >= 0xffffffffffff8000ULL && address <= 0xFFFFFFFFFFFFBFFFULL))
+                 {
+
+//         fprintf(stderr,"\n ...............User Hack in place for CVMSEG=%lx...........\n",(unsigned long)address);
+
+		 	 	 	//	*physical=address&0x000000000;
+						 *physical=(address&0x510000000)+sam;
+			                         sam=sam+1;
+					//	*physical=address&0x0000000000fffff;
+		 	 	 		*prot = PAGE_READ | PAGE_WRITE;
+                                                       }
+
+else {
             ret = TLBRET_BADADDR;
         }
     }
@@ -278,7 +321,7 @@ int cpu_mips_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
 #if 0
     log_cpu_state(env, 0);
 #endif
-    qemu_log("%s pc " TARGET_FMT_lx " ad " TARGET_FMT_lx " rw %d mmu_idx %d\n",
+    qemu_log("%s pc " TARGET_FMT_lx " ad(virtual+faulting) " TARGET_FMT_lx " rw %d mmu_idx %d\n",
               __func__, env->active_tc.PC, address, rw, mmu_idx);
 
     rw &= 1;
@@ -290,7 +333,7 @@ int cpu_mips_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
     access_type = ACCESS_INT;
     ret = get_physical_address(env, &physical, &prot,
                                address, rw, access_type);
-    qemu_log("%s address=" TARGET_FMT_lx " ret %d physical " TARGET_FMT_plx " prot %d\n",
+    qemu_log("%s address(virtual+faulting)=" TARGET_FMT_lx " ret %d physical(ofFaulting) " TARGET_FMT_plx " prot %d\n",
               __func__, address, ret, physical, prot);
     if (ret == TLBRET_MATCH) {
         tlb_set_page(env, address & TARGET_PAGE_MASK,
@@ -397,7 +440,7 @@ static void set_hflags_for_handler (CPUState *env)
 #endif
 
 void do_interrupt (CPUState *env)
-{
+{  //fprintf(stderr,"\n do_interrupt : qemu \n");
 #if !defined(CONFIG_USER_ONLY)
     target_ulong offset;
     int cause = -1;
@@ -469,6 +512,7 @@ void do_interrupt (CPUState *env)
         if (!(env->CP0_Status & (1 << CP0St_EXL)))
             env->CP0_Cause &= ~(1 << CP0Ca_BD);
         env->active_tc.PC = (int32_t)0xBFC00000;
+        //env->active_tc.PC = (int32_t)0xBFC30000;
         set_hflags_for_handler(env);
         break;
     case EXCP_EXT_INTERRUPT:

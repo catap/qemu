@@ -27,7 +27,7 @@
 #include "qemu-timer.h"
 
 //#define DEBUG_PIT
-
+int glob_pit_int=0;
 #define RW_STATE_LSB 1
 #define RW_STATE_MSB 2
 #define RW_STATE_WORD0 3
@@ -382,7 +382,9 @@ static void pit_irq_timer_update(PITChannelState *s, int64_t current_time)
         return;
     expire_time = pit_get_next_transition_time(s, current_time);
     irq_level = pit_get_out1(s, current_time);
-    qemu_set_irq(s->irq, irq_level);
+   // fprintf(stderr,"\n pit_irq_timer_update \n");
+          glob_pit_int=1;
+    qemu_set_irq(s->irq, irq_level);  //commeneted by ayaz
 #ifdef DEBUG_PIT
     printf("irq_level=%d next_delay=%f\n",
            irq_level,

@@ -914,6 +914,7 @@ m68k-linux-user \
 microblaze-linux-user \
 microblazeel-linux-user \
 mips-linux-user \
+mips64-linux-user \
 mipsel-linux-user \
 ppc-linux-user \
 ppc64-linux-user \
@@ -3422,6 +3423,7 @@ case "$target_arch2" in
     TARGET_ARCH=mips64
     TARGET_BASE_ARCH=mips
     echo "TARGET_ABI_MIPSN64=y" >> $config_target_mak
+    target_nptl="yes"
     target_phys_bits=64
     target_long_alignment=8
   ;;

@@ -173,6 +173,13 @@ struct TCState {
     target_ulong CP0_TCSchedule;
     target_ulong CP0_TCScheFBack;
     int32_t CP0_Debug_tcstatus;
+    /* Multiplier registers for Octeon */
+    target_ulong MPL0;
+    target_ulong MPL1;
+    target_ulong MPL2;
+    target_ulong P0;
+    target_ulong P1;
+    target_ulong P2;
 };
 
 typedef struct CPUMIPSState CPUMIPSState;
@@ -481,6 +488,10 @@ struct CPUMIPSState {
     const mips_def_t *cpu_model;
     void *irq[8];
     struct QEMUTimer *timer; /* Internal timer */
+    target_ulong CP0_CvmMemCtl;//Octeon
+    target_ulong CP0_CvmCtl;   //Octeon
+    target_ulong CP0_CvmCount;   //Octeon
+    target_ulong CP0_ICacheErr;	//Octeon	         
 };
 
 #if !defined(CONFIG_USER_ONLY)

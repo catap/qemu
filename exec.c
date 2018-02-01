@@ -56,7 +56,7 @@
 #include "xen-mapcache.h"
 #include "trace.h"
 #endif
-
+extern CPUState * envArray[12];
 //#define DEBUG_TB_INVALIDATE
 //#define DEBUG_FLUSH
 //#define DEBUG_TLB
@@ -1648,7 +1648,7 @@ static void cpu_unlink_tb(CPUState *env)
 #ifndef CONFIG_USER_ONLY
 /* mask must never be zero, except for A20 change call */
 static void tcg_handle_interrupt(CPUState *env, int mask)
-{
+{     //  fprintf(stderr,"\n tcg_handle_interrupt \n");
     int old_mask;
 
     old_mask = env->interrupt_request;
@@ -1694,6 +1694,7 @@ void cpu_exit(CPUState *env)
 {
     env->exit_request = 1;
     cpu_unlink_tb(env);
+     envArray[0]->CP0_Cause &=0xFFFFFBFF;   //line added by ayaz
 }
 
 const CPULogItem cpu_log_items[] = {

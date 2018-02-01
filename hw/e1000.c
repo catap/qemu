@@ -23,8 +23,8 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
-
-
+int DELL=0;
+extern int ayaz2;
 #include "hw.h"
 #include "pci.h"
 #include "net.h"
@@ -32,11 +32,10 @@
 #include "loader.h"
 #include "sysemu.h"
 #include "dma.h"
-
 #include "e1000_hw.h"
 
 #define E1000_DEBUG
-
+//int glob_e1000_int=0;
 #ifdef E1000_DEBUG
 enum {
     DEBUG_GENERAL,	DEBUG_IO,	DEBUG_MMIO,	DEBUG_INTERRUPT,
@@ -58,7 +57,7 @@ static int debugflags = DBGBIT(TXERR) | DBGBIT(GENERAL);
 #define IOPORT_SIZE       0x40
 #define PNPMMIO_SIZE      0x20000
 #define MIN_BUF_SIZE      60 /* Min. octets in an ethernet frame sans FCS */
-
+int tmp_chck=0;
 /*
  * HW models:
  *  E1000_DEV_ID_82540EM works with Windows and Linux
@@ -126,7 +125,7 @@ typedef struct E1000State_st {
         uint32_t old_eecd;
     } eecd_state;
 } E1000State;
-
+E1000State *d;
 #define	defreg(x)	x = (E1000_##x>>2)
 enum {
     defreg(CTRL),	defreg(EECD),	defreg(EERD),	defreg(GPRC),
@@ -155,19 +154,30 @@ static const char phy_regcap[0x20] = {
 static void
 set_interrupt_cause(E1000State *s, int index, uint32_t val)
 {
+	//glob_e1000_int=1;
+//fprintf(stderr,"si");
+	 //fprintf(stderr,"\n ****** S.I.C val=0x%llx \n",val);
+	// printf("\n Raising e1000 interrupt \n");
+    
     if (val)
         val |= E1000_ICR_INT_ASSERTED;
     s->mac_reg[ICR] = val;
     s->mac_reg[ICS] = val;
+      //            printf("\n val in S.I.C:0x%llx \n",val);
+   // fprintf(stderr,"\n IMS=0x%llx \n",s->mac_reg[IMS]);
+   // fprintf(stderr,"\n sset int cause:%d \n",(s->mac_reg[IMS] & s->mac_reg[ICR]) != 0);
     qemu_set_irq(s->dev.irq[0], (s->mac_reg[IMS] & s->mac_reg[ICR]) != 0);
 }
 
 static void
 set_ics(E1000State *s, int index, uint32_t val)
-{
+{   uint32 tmp_val;
     DBGOUT(INTERRUPT, "set_ics %x, ICR %x, IMR %x\n", val, s->mac_reg[ICR],
         s->mac_reg[IMS]);
-    set_interrupt_cause(s, 0, val | s->mac_reg[ICR]);
+  //  fprintf(stderr,"\n set_ics:0x%llx",val | s->mac_reg[ICR]);
+
+    	set_interrupt_cause(s, 0, val | s->mac_reg[ICR]);
+
 }
 
 static int
@@ -236,26 +246,61 @@ set_mdic(E1000State *s, int index, uint32_t val)
     s->mac_reg[MDIC] = val | E1000_MDIC_READY;
     set_ics(s, 0, E1000_ICR_MDAC);
 }
-
-static uint32_t
+E1000State *test_pointer;
+//static
+ uint32_t
 get_eecd(E1000State *s, int index)
-{
-    uint32_t ret = E1000_EECD_PRES|E1000_EECD_GNT | s->eecd_state.old_eecd;
+{   //printf("\n eeprom priniting in get_eecd \n");
+      //test_pointer=s;
+	 //int j;
+	 //for (j=0; j<64; j++){
+     //if(j>7 && j%8==0)
+       //printf("\n");
+       //printf(" 0x%llx ",s->eeprom_data[j]);	
+       	
+	//}
+	
+	
+	
+		//printf("\n eecd_state.val_in=0x%llx \n",s->eecd_state.val_in);
+	//printf("\n eecd_state.bitnum_in=0x%llx \n",s->eecd_state.bitnum_in);
+	//printf("\n eecd_state.bitnum_out=0x%llx \n",s->eecd_state.bitnum_out);
+	//printf("\n eecd_state.reading=0x%llx \n",s->eecd_state.reading);
+	//printf("\n eecd_state.old_eecd=0x%llx \n",s->eecd_state.old_eecd);
 
+
+    uint32_t ret = E1000_EECD_PRES|E1000_EECD_GNT | s->eecd_state.old_eecd;
+    //  printf("\n eecd is called >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  \n");
     DBGOUT(EEPROM, "reading eeprom bit %d (reading %d)\n",
            s->eecd_state.bitnum_out, s->eecd_state.reading);
+          //printf("\n reading eeprom bit %d (reading %d)\n",
+          //s->eecd_state.bitnum_out, s->eecd_state.reading);
+         // printf("s->eeprom_data[(s->eecd_state.bitnum_out >> 4) & 0x3f]:0x%llx \n",s->eeprom_data[(s->eecd_state.bitnum_out >> 4) & 0x3f]);
+         // printf("\n ((s->eecd_state.bitnum_out & 0xf) ^ 0xf))) :0x%llx \n",((s->eecd_state.bitnum_out & 0xf) ^ 0xf));
     if (!s->eecd_state.reading ||
-        ((s->eeprom_data[(s->eecd_state.bitnum_out >> 4) & 0x3f] >>
-          ((s->eecd_state.bitnum_out & 0xf) ^ 0xf))) & 1)
-        ret |= E1000_EECD_DO;
+        (((s->eeprom_data[(s->eecd_state.bitnum_out >> 4) & 0x3f] >>
+          ((s->eecd_state.bitnum_out & 0xf) ^ 0xf))) & 1))
+        ret |= E1000_EECD_DO;      
+    //printf("\n eecd:returnv value:0x%llx \n",ret);
     return ret;
 }
 
-static void
+//static 
+void
 set_eecd(E1000State *s, int index, uint32_t val)
-{
+{   
+	//s=test_pointer;
+	//printf("\n  set_eecd is called: val:0x%llx  \n",val);
     uint32_t oldval = s->eecd_state.old_eecd;
-
+     //printf("\n eeprom priniting in set_eecd \n");
+    //int j;
+	 //for (j=0; j<64; j++){
+      //if(j>7 && j%8==0)
+       //printf("\n");
+       //printf(" 0x%llx ",s->eeprom_data[j]);	
+       	//}//
+	
+   
     s->eecd_state.old_eecd = val & (E1000_EECD_SK | E1000_EECD_CS |
             E1000_EECD_DI|E1000_EECD_FWE_MASK|E1000_EECD_REQ);
     if (!(E1000_EECD_CS & val))			// CS inactive; nothing to do
@@ -283,6 +328,9 @@ set_eecd(E1000State *s, int index, uint32_t val)
     DBGOUT(EEPROM, "eeprom bitnum in %d out %d, reading %d\n",
            s->eecd_state.bitnum_in, s->eecd_state.bitnum_out,
            s->eecd_state.reading);
+          // printf("\n eeprom bitnum in %d out %d, reading %d\n",s->eecd_state.bitnum_in, s->eecd_state.bitnum_out,
+          // s->eecd_state.reading);
+           
 }
 
 static uint32_t
@@ -524,12 +572,12 @@ static uint64_t tx_desc_base(E1000State *s)
 
 static void
 start_xmit(E1000State *s)
-{
+{ //  printf(	"\n In start_xmit \n");
     dma_addr_t base;
     struct e1000_tx_desc desc;
     uint32_t tdh_start = s->mac_reg[TDH], cause = E1000_ICS_TXQE;
-
-    if (!(s->mac_reg[TCTL] & E1000_TCTL_EN)) {
+  
+    if (!(s->mac_reg[TCTL] & E1000_TCTL_EN)) {// printf("\n tx disabled \n");
         DBGOUT(TX, "tx disabled\n");
         return;
     }
@@ -537,12 +585,14 @@ start_xmit(E1000State *s)
     while (s->mac_reg[TDH] != s->mac_reg[TDT]) {
         base = tx_desc_base(s) +
                sizeof(struct e1000_tx_desc) * s->mac_reg[TDH];
+              // printf("\n going to call pci_dma_read ........\n");
+       // fprintf(stderr,"check in start_xmit");
         pci_dma_read(&s->dev, base, (void *)&desc, sizeof(desc));
 
         DBGOUT(TX, "index %d: %p : %x %x\n", s->mac_reg[TDH],
                (void *)(intptr_t)desc.buffer_addr, desc.lower.data,
                desc.upper.data);
-
+           // fprintf(stderr,"check in start_xmit");
         process_tx_desc(s, &desc);
         cause |= txdesc_writeback(s, base, &desc);
 
@@ -564,7 +614,7 @@ start_xmit(E1000State *s)
 
 static int
 receive_filter(E1000State *s, const uint8_t *buf, int size)
-{
+{  //   fprintf(stderr,"\n receive_filter \n");
     static const uint8_t bcast[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
     static const int mta_shift[] = {4, 3, 2, 0};
     uint32_t f, rctl = s->mac_reg[RCTL], ra[2], *rp;
@@ -617,7 +667,7 @@ receive_filter(E1000State *s, const uint8_t *buf, int size)
 
 static void
 e1000_set_link_status(VLANClientState *nc)
-{
+{   //   fprintf(stderr,"e1000_set_link_status");
     E1000State *s = DO_UPCAST(NICState, nc, nc)->opaque;
     uint32_t old_status = s->mac_reg[STATUS];
 
@@ -634,7 +684,7 @@ e1000_set_link_status(VLANClientState *nc)
 }
 
 static bool e1000_has_rxbufs(E1000State *s, size_t total_size)
-{
+{   
     int bufs;
     /* Fast-path short packets */
     if (total_size <= s->rxbuf_size) {
@@ -653,7 +703,7 @@ static bool e1000_has_rxbufs(E1000State *s, size_t total_size)
 
 static int
 e1000_can_receive(VLANClientState *nc)
-{
+{   
     E1000State *s = DO_UPCAST(NICState, nc, nc)->opaque;
 
     return (s->mac_reg[RCTL] & E1000_RCTL_EN) && e1000_has_rxbufs(s, 1);
@@ -669,7 +719,11 @@ static uint64_t rx_desc_base(E1000State *s)
 
 static ssize_t
 e1000_receive(VLANClientState *nc, const uint8_t *buf, size_t size)
-{
+{  // fprintf(stderr,"\n e1000 receive packet \n");
+	/*if(tmp_chck)
+		tmp_chck=0;
+	else
+		tmp_chck=1;*/
     E1000State *s = DO_UPCAST(NICState, nc, nc)->opaque;
     struct e1000_rx_desc desc;
     dma_addr_t base;
@@ -726,10 +780,13 @@ e1000_receive(VLANClientState *nc, const uint8_t *buf, size_t size)
                 if (copy_size > s->rxbuf_size) {
                     copy_size = s->rxbuf_size;
                 }
+              //  fprintf(stderr,	"\n pci dma write \n");
                 pci_dma_write(&s->dev, le64_to_cpu(desc.buffer_addr),
                                  (void *)(buf + desc_offset + vlan_offset),
                                  copy_size);
+              //  fprintf(stderr,	"\n pci dma write 2 \n");
             }
+          //  fprintf(stderr,	"\n pci dma write 3 \n");
             desc_offset += desc_size;
             desc.length = cpu_to_le16(desc_size);
             if (desc_offset >= total_size) {
@@ -751,6 +808,7 @@ e1000_receive(VLANClientState *nc, const uint8_t *buf, size_t size)
         if (s->mac_reg[RDH] == rdh_start) {
             DBGOUT(RXERR, "RDH wraparound @%x, RDT %x, RDLEN %x\n",
                    rdh_start, s->mac_reg[RDT], s->mac_reg[RDLEN]);
+          //  fprintf(stderr,"\set_ics in e1000_receive 1 \n");
             set_ics(s, 0, E1000_ICS_RXO);
             return -1;
         }
@@ -773,7 +831,11 @@ e1000_receive(VLANClientState *nc, const uint8_t *buf, size_t size)
     if (((rdt - s->mac_reg[RDH]) * sizeof(desc)) <= s->mac_reg[RDLEN] >>
         s->rxbuf_min_shift)
         n |= E1000_ICS_RXDMT0;
-
+  // fprintf(stderr,"\set_ics in e1000_receive 2;n=0x%llx \n",n);
+  /* if(tmp_chck)
+   s->mac_reg[IMS]=0x0;
+   else
+	   s->mac_reg[IMS]=0x9d;*/
     set_ics(s, 0, n);
 
     return size;
@@ -781,15 +843,18 @@ e1000_receive(VLANClientState *nc, const uint8_t *buf, size_t size)
 
 static uint32_t
 mac_readreg(E1000State *s, int index)
-{
+{  // printf("\n ------------------mac_readreg-------------------: index:%d \n",index);
+   // printf("\n **********************s->mac_reg:0x%llx**********\n",s->mac_reg[index]);	
+   // printf("\n s:0x%llx \n",s);
     return s->mac_reg[index];
 }
 
 static uint32_t
 mac_icr_read(E1000State *s, int index)
-{
+{  // printf("\n QEMU mac read \n");
+    //  printf("\n s:0x%llx \n",s);
     uint32_t ret = s->mac_reg[ICR];
-
+     // fprintf(stderr,"ICR 0x%llx ", ret);
     DBGOUT(INTERRUPT, "ICR read: %x\n", ret);
     set_interrupt_cause(s, 0, 0);
     return ret;
@@ -797,7 +862,7 @@ mac_icr_read(E1000State *s, int index)
 
 static uint32_t
 mac_read_clr4(E1000State *s, int index)
-{
+{    //printf("\n QEMU mac read \n");
     uint32_t ret = s->mac_reg[index];
 
     s->mac_reg[index] = 0;
@@ -806,7 +871,7 @@ mac_read_clr4(E1000State *s, int index)
 
 static uint32_t
 mac_read_clr8(E1000State *s, int index)
-{
+{  // printf("\n QEMU mac read \n");
     uint32_t ret = s->mac_reg[index];
 
     s->mac_reg[index] = 0;
@@ -816,7 +881,7 @@ mac_read_clr8(E1000State *s, int index)
 
 static void
 mac_writereg(E1000State *s, int index, uint32_t val)
-{
+{   // printf("\n mac_writereg: and s=%d  \n",s);
     s->mac_reg[index] = val;
 }
 
@@ -851,12 +916,13 @@ static void
 set_icr(E1000State *s, int index, uint32_t val)
 {
     DBGOUT(INTERRUPT, "set_icr %x\n", val);
+   // fprintf(stderr,"\n set_icr:0x%llx",val);
     set_interrupt_cause(s, 0, s->mac_reg[ICR] & ~val);
 }
 
 static void
 set_imc(E1000State *s, int index, uint32_t val)
-{
+{  // fprintf("\n ")
     s->mac_reg[IMS] &= ~val;
     set_ics(s, 0, 0);
 }
@@ -904,16 +970,19 @@ static void (*macreg_writeops[])(E1000State *, int, uint32_t) = {
 };
 enum { NWRITEOPS = ARRAY_SIZE(macreg_writeops) };
 
-static void
+void
 e1000_mmio_write(void *opaque, target_phys_addr_t addr, uint64_t val,
                  unsigned size)
-{
-    E1000State *s = opaque;
+{ // ayaz2=0;
+    E1000State *s = d;//opaque;
+    //s=test_pointer;
+   // fprintf(stderr,"\n:e1000:mmio_write:val=0x%llx",val);
     unsigned int index = (addr & 0x1ffff) >> 2;
-
+        //   printf("\n ((( e1000_mmio_write:\n");
     if (index < NWRITEOPS && macreg_writeops[index]) {
+        // printf("\n ----e1000_mmio_write\n");
         macreg_writeops[index](s, index, val);
-    } else if (index < NREADOPS && macreg_readops[index]) {
+        } else if (index < NREADOPS && macreg_readops[index]) {
         DBGOUT(MMIO, "e1000_mmio_writel RO %x: 0x%04"PRIx64"\n", index<<2, val);
     } else {
         DBGOUT(UNKNOWN, "MMIO unknown write addr=0x%08x,val=0x%08"PRIx64"\n",
@@ -921,12 +990,66 @@ e1000_mmio_write(void *opaque, target_phys_addr_t addr, uint64_t val,
     }
 }
 
-static uint64_t
+uint64_t
 e1000_mmio_read(void *opaque, target_phys_addr_t addr, unsigned size)
-{
-    E1000State *s = opaque;
-    unsigned int index = (addr & 0x1ffff) >> 2;
+{ // printf("\n e1000_mmio_read \n");
+   // printf("\n opaque in e1000_mmio_read : 0x%llx \n",opaque);
+E1000State *s = d;//opaque;
 
+int i;
+//test_pointer=s;   
+ if(DELL == 0  && 0){
+	 uint16_t e1000_eeprom_template[64] = {
+    0x5452, 0x1200, 0x5634, 0x0000,      0xffff, 0x0000,      0x0000, 0x0000,
+    0x3000, 0x1000, 0x6403, E1000_DEVID, 0x8086, E1000_DEVID, 0x8086, 0x3040,
+    0x0008, 0x2000, 0x7e14, 0x0048,      0x1000, 0x00d8,      0x0000, 0x2700,
+    0x6cc9, 0x3150, 0x0722, 0x040b,      0x0984, 0x0000,      0xc000, 0x0706,
+    0x1008, 0x0000, 0x0f04, 0x7fff,      0x4d01, 0xffff,      0xffff, 0xffff,
+    0xffff, 0xffff, 0xffff, 0xffff,      0xffff, 0xffff,      0xffff, 0xffff,
+    0x0100, 0x4000, 0x121c, 0xffff,      0xffff, 0xffff,      0xffff, 0xffff,
+    0xffff, 0xffff, 0xffff, 0xffff,      0xffff, 0xffff,      0xffff, 0x79ad,
+};
+	 uint8_t *macaddr;
+	 uint8_t *pci_conf;
+	  memmove(s->eeprom_data,e1000_eeprom_template,
+        sizeof e1000_eeprom_template);
+    //qemu_macaddr_default_if_unset(&s->conf.macaddr);
+    //macaddr = s->conf.macaddr.a;
+    //for (i = 0; i < 3; i++)
+        //s->eeprom_data[i] = (macaddr[2*i+1]<<8) | macaddr[2*i];
+         s->eecd_state.val_in=0x0; 
+         s->eecd_state.bitnum_in=0x0; 
+         s->eecd_state.bitnum_out=0x0; 
+         s->eecd_state.reading=0x0;
+         s->eecd_state.old_eecd=0x0; 
+        
+         pci_conf = s->dev.config;
+ //printf("\n _______________\\\\\\\\\\\\\\\\\\\\\HOST PCI \\\\\\\\\\\\\\\___________________ \n");
+    /* TODO: RST# value should be 0, PCI spec 6.2.4 */
+    pci_conf[PCI_CACHE_LINE_SIZE] = 0x10;
+    pci_conf[PCI_INTERRUPT_PIN] = 1; /* interrupt pin A */
+    printf("\n pci bar0 e1000: 0x%llx \n",pci_conf[0x10]);
+    printf("\n pci bar1 e1000: 0x%llx \n",pci_conf[0x14]);
+  //  pci_conf[PCI_BASE_ADDRESS_1]=0x80011A001fbf0000;  //0xffffffffbf000000;
+    //e1000_mmio_setup(s);
+ //printf("\n PCI_BASE_ADDRESS_SPACE_MEMORY:0x%llx \n",&s->mmio.addr);
+ //printf("\n  PCI_BASE_ADDRESS_SPACE_I0 :0x%llx  \n",PCI_BASE_ADDRESS_SPACE_IO);
+ //printf("\n PCI VENDOR ID : =x%llx \n",pci_conf[0x0]);
+    pci_register_bar(&s->dev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &s->mmio);
+    pci_register_bar(&s->dev, 1, PCI_BASE_ADDRESS_SPACE_IO, &s->io);
+   //s->nic = qemu_new_nic(&net_e1000_info, &s->conf,
+     //                     s->dev.qdev.info->name, s->dev.qdev.id, s);
+
+    //qemu_format_nic_info_str(&s->nic->nc, macaddr);
+
+    //add_boot_device_path(s->conf.bootindex, &pci_dev->qdev, "/ethernet-phy@0");
+        
+        
+	 DELL=1;
+ }
+   // printf("\n ****** s=0x%llx \n",s);
+    unsigned int index = (addr & 0x1ffff) >> 2;
+     //printf("\n index=0x%llx and NREADOPS:0x%llx\n",index,NREADOPS);
     if (index < NREADOPS && macreg_readops[index])
     {
         return macreg_readops[index](s, index);
@@ -957,8 +1080,8 @@ static uint64_t e1000_io_read(void *opaque, target_phys_addr_t addr,
 static void e1000_io_write(void *opaque, target_phys_addr_t addr,
                            uint64_t val, unsigned size)
 {
-    E1000State *s = opaque;
-
+   E1000State *s = opaque;
+   
     (void)s;
 }
 
@@ -1051,7 +1174,8 @@ static const VMStateDescription vmstate_e1000 = {
     }
 };
 
-static const uint16_t e1000_eeprom_template[64] = {
+//static const 
+uint16_t e1000_eeprom_template[64] = {
     0x0000, 0x0000, 0x0000, 0x0000,      0xffff, 0x0000,      0x0000, 0x0000,
     0x3000, 0x1000, 0x6403, E1000_DEVID, 0x8086, E1000_DEVID, 0x8086, 0x3040,
     0x0008, 0x2000, 0x7e14, 0x0048,      0x1000, 0x00d8,      0x0000, 0x2700,
@@ -1095,9 +1219,10 @@ e1000_mmio_setup(E1000State *d)
         E1000_MDIC, E1000_ICR, E1000_ICS, E1000_IMS,
         E1000_IMC, E1000_TCTL, E1000_TDT, PNPMMIO_SIZE
     };
-
+    MemoryRegion *e1000_mmio_add_space = get_system_memory();
     memory_region_init_io(&d->mmio, &e1000_mmio_ops, d, "e1000-mmio",
                           PNPMMIO_SIZE);
+    //memory_region_add_subregion(e1000_mmio_add_space,0xffffffffbf000000,&d->mmio);                      
     memory_region_add_coalescing(&d->mmio, 0, excluded_regs[0]);
     for (i = 0; excluded_regs[i] != PNPMMIO_SIZE; i++)
         memory_region_add_coalescing(&d->mmio, excluded_regs[i] + 4,
@@ -1127,7 +1252,6 @@ pci_e1000_uninit(PCIDevice *dev)
 static void e1000_reset(void *opaque)
 {
     E1000State *d = opaque;
-
     memset(d->phy_reg, 0, sizeof d->phy_reg);
     memmove(d->phy_reg, phy_reg_init, sizeof phy_reg_init);
     memset(d->mac_reg, 0, sizeof d->mac_reg);
@@ -1145,14 +1269,16 @@ static NetClientInfo net_e1000_info = {
     .link_status_changed = e1000_set_link_status,
 };
 
-static int pci_e1000_init(PCIDevice *pci_dev)
+//static
+ int pci_e1000_init(PCIDevice *pci_dev)
 {
-    E1000State *d = DO_UPCAST(E1000State, dev, pci_dev);
+    //E1000State *d 
+    d= DO_UPCAST(E1000State, dev, pci_dev);
+
     uint8_t *pci_conf;
     uint16_t checksum = 0;
     int i;
     uint8_t *macaddr;
-
     pci_conf = d->dev.config;
 
     /* TODO: RST# value should be 0, PCI spec 6.2.4 */
@@ -1163,9 +1289,8 @@ static int pci_e1000_init(PCIDevice *pci_dev)
     e1000_mmio_setup(d);
 
     pci_register_bar(&d->dev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->mmio);
-
     pci_register_bar(&d->dev, 1, PCI_BASE_ADDRESS_SPACE_IO, &d->io);
-
+ 
     memmove(d->eeprom_data, e1000_eeprom_template,
         sizeof e1000_eeprom_template);
     qemu_macaddr_default_if_unset(&d->conf.macaddr);
@@ -1174,7 +1299,9 @@ static int pci_e1000_init(PCIDevice *pci_dev)
         d->eeprom_data[i] = (macaddr[2*i+1]<<8) | macaddr[2*i];
     for (i = 0; i < EEPROM_CHECKSUM_REG; i++)
         checksum += d->eeprom_data[i];
+
     checksum = (uint16_t) EEPROM_SUM - checksum;
+
     d->eeprom_data[EEPROM_CHECKSUM_REG] = checksum;
 
     d->nic = qemu_new_nic(&net_e1000_info, &d->conf,

@@ -8,7 +8,12 @@ DEF_HELPER_3(ldl, tl, tl, tl, int)
 DEF_HELPER_3(ldr, tl, tl, tl, int)
 DEF_HELPER_3(sdl, void, tl, tl, int)
 DEF_HELPER_3(sdr, void, tl, tl, int)
+DEF_HELPER_2(v3mulu, tl, tl, tl)
+DEF_HELPER_2(vmulu, tl, tl, tl)
+DEF_HELPER_1(dpop, tl, tl)
 #endif
+DEF_HELPER_1(pop, tl, tl);
+
 DEF_HELPER_3(lwl, tl, tl, tl, int)
 DEF_HELPER_3(lwr, tl, tl, tl, int)
 DEF_HELPER_3(swl, void, tl, tl, int)
@@ -90,6 +95,11 @@ DEF_HELPER_0(dmfc0_tcschefback, tl)
 DEF_HELPER_0(dmfc0_lladdr, tl)
 DEF_HELPER_1(dmfc0_watchlo, tl, i32)
 #endif /* TARGET_MIPS64 */
+/* code adde by ayaz  */
+DEF_HELPER_0(mfc0_CvmCount,void) //
+
+
+
 
 DEF_HELPER_1(mtc0_index, void, tl)
 DEF_HELPER_1(mtc0_mvpcontrol, void, tl)

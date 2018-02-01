@@ -23,25 +23,40 @@
 #include "hw.h"
 #include "mips_cpudevs.h"
 #include "cpu.h"
-
+extern int glob_e1000_int;
+int just_var=500;
+extern int glob_timer_int;
 static void cpu_mips_irq_request(void *opaque, int irq, int level)
 {
     CPUState *env = (CPUState *)opaque;
 
     if (irq < 0 || irq > 7)
         return;
+        
+//printf("\n interrupt in cpu_mips_irq_request:%d \n",irq);
 
+  
     if (level) {
         env->CP0_Cause |= 1 << (irq + CP0Ca_IP);
     } else {
         env->CP0_Cause &= ~(1 << (irq + CP0Ca_IP));
     }
 
-    if (env->CP0_Cause & CP0Ca_IP_mask) {
-        cpu_interrupt(env, CPU_INTERRUPT_HARD);
-    } else {
+    
+    
+   //is if condition is added to make sure only uART's interrupt is passed on
+
+  if (env->CP0_Cause & CP0Ca_IP_mask){
+	  glob_timer_int=0;
+	// fprintf(stderr,"\n CP0_Cause:0x%llx and irq:%d \n",env->CP0_Cause,irq);
+	  cpu_interrupt(env, CPU_INTERRUPT_HARD);
+	  //	env->CP0_Cause &= 0xFFFFFBFF;
+    } else {  
         cpu_reset_interrupt(env, CPU_INTERRUPT_HARD);
     }
+    
+    
+    
 }
 
 void cpu_mips_irq_init_cpu(CPUState *env)

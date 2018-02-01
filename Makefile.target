@@ -205,7 +205,7 @@ obj-$(CONFIG_REALLY_VIRTFS) += 9pfs/virtio-9p-device.o
 obj-$(CONFIG_KVM) += kvm.o kvm-all.o
 obj-$(CONFIG_NO_KVM) += kvm-stub.o
 obj-y += memory.o
-LIBS+=-lz
+LIBS+=-lz -lrt -lm
 
 QEMU_CFLAGS += $(VNC_TLS_CFLAGS)
 QEMU_CFLAGS += $(VNC_SASL_CFLAGS)
@@ -293,7 +293,7 @@ obj-lm32-y += milkymist-uart.o
 obj-lm32-y += milkymist-vgafb.o
 obj-lm32-y += framebuffer.o
 
-obj-mips-y = mips_r4k.o mips_jazz.o mips_malta.o mips_mipssim.o
+obj-mips-y = mips_r4k.o mips_jazz.o mips_malta.o mips_mipssim.o mips_octeon.o
 obj-mips-y += mips_addr.o mips_timer.o mips_int.o
 obj-mips-y += vga.o
 obj-mips-y += jazz_led.o

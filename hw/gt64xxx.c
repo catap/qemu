@@ -28,7 +28,6 @@
 #include "pci_host.h"
 #include "pc.h"
 #include "exec-memory.h"
-
 //#define DEBUG
 
 #ifdef DEBUG
@@ -311,11 +310,12 @@ static void gt64120_writel (void *opaque, target_phys_addr_t addr,
 {
     GT64120State *s = opaque;
     uint32_t saddr;
-
+//printf("\n gt write \n");
     if (!(s->regs[GT_CPU] & 0x00001000))
-        val = bswap32(val);
+     //   val = bswap32(val);
 
     saddr = (addr & 0xfff) >> 2;
+  //  printf("\n saddr; 0x%llx \n",saddr);
     switch (saddr) {
 
     /* CPU Configuration */
@@ -530,12 +530,13 @@ static void gt64120_writel (void *opaque, target_phys_addr_t addr,
         /* not implemented */
         break;
     case GT_PCI0_CFGADDR:
-        s->pci.config_reg = val & 0x80fffffc;
+        s->pci.config_reg = val ; // & 0x80fffffc; //commented by ayaz
         break;
     case GT_PCI0_CFGDATA:
-        if (!(s->regs[GT_PCI0_CMD] & 1) && (s->pci.config_reg & 0x00fff800))
-            val = bswap32(val);
-        if (s->pci.config_reg & (1u << 31))
+      //  if (!(s->regs[GT_PCI0_CMD] & 1) && (s->pci.config_reg & 0x00fff800))
+          //  val = bswap32(val);
+    //    if (s->pci.config_reg & (1u << 31))  //commented by ayaz
+    //printf("\n pci write: val:0x%llx \n",val);
             pci_data_write(s->pci.bus, s->pci.config_reg, val, 4);
         break;
 
@@ -777,8 +778,9 @@ static uint64_t gt64120_readl (void *opaque,
             val = 0xffffffff;
         else
             val = pci_data_read(s->pci.bus, s->pci.config_reg, 4);
+          //  printf("\n ____________ valuer ead in gt64xxx = 0x%llx ________ \n",val);
         if (!(s->regs[GT_PCI0_CMD] & 1) && (s->pci.config_reg & 0x00fff800))
-            val = bswap32(val);
+           // val = bswap32(val);
         break;
 
     case GT_PCI0_CMD:

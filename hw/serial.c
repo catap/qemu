@@ -30,7 +30,7 @@
 #include "sysemu.h"
 
 //#define DEBUG_SERIAL
-
+int glob_uart_int;
 #define UART_LCR_DLAB	0x80	/* Divisor latch access bit */
 
 #define UART_IER_MSI	0x08	/* Enable Modem status interrupt */
@@ -235,10 +235,10 @@ static void serial_update_irq(SerialState *s)
 
     s->iir = tmp_iir | (s->iir & 0xF0);
 
-    if (tmp_iir != UART_IIR_NO_INT) {
-        qemu_irq_raise(s->irq);
+    if (tmp_iir != UART_IIR_NO_INT) { glob_uart_int=1;
+			//qemu_irq_raise(s->irq);
     } else {
-        qemu_irq_lower(s->irq);
+        //qemu_irq_lower(s->irq);
     }
 }
 

@@ -34,7 +34,7 @@ configure: ;
 
 $(call set-vpath, $(SRC_PATH):$(SRC_PATH)/hw)
 
-LIBS+=-lz $(LIBS_TOOLS)
+LIBS+=-lz -lrt -lm  $(LIBS_TOOLS)
 
 ifdef BUILD_DOCS
 DOCS=qemu-doc.html qemu-tech.html qemu.1 qemu-img.1 qemu-nbd.8 QMP/qmp-commands.txt
@@ -355,19 +355,19 @@ qemu-img-cmds.texi: $(SRC_PATH)/qemu-img-cmds.hx
 qemu.1: qemu-doc.texi qemu-options.texi qemu-monitor.texi
 	$(call quiet-command, \
 	  perl -Ww -- $(SRC_PATH)/scripts/texi2pod.pl $< qemu.pod && \
-	  pod2man --section=1 --center=" " --release=" " qemu.pod > $@, \
+	  pod2man --errors=none --section=1 --center=" " --release=" " qemu.pod > $@, \
 	  "  GEN   $@")
 
 qemu-img.1: qemu-img.texi qemu-img-cmds.texi
 	$(call quiet-command, \
 	  perl -Ww -- $(SRC_PATH)/scripts/texi2pod.pl $< qemu-img.pod && \
-	  pod2man --section=1 --center=" " --release=" " qemu-img.pod > $@, \
+	  pod2man --errors=none --section=1 --center=" " --release=" " qemu-img.pod > $@, \
 	  "  GEN   $@")
 
 qemu-nbd.8: qemu-nbd.texi
 	$(call quiet-command, \
 	  perl -Ww -- $(SRC_PATH)/scripts/texi2pod.pl $< qemu-nbd.pod && \
-	  pod2man --section=8 --center=" " --release=" " qemu-nbd.pod > $@, \
+	  pod2man --errors=none --section=8 --center=" " --release=" " qemu-nbd.pod > $@, \
 	  "  GEN   $@")
 
 dvi: qemu-doc.dvi qemu-tech.dvi

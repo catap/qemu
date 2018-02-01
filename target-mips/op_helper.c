@@ -19,7 +19,7 @@
 #include <stdlib.h>
 #include "cpu.h"
 #include "dyngen-exec.h"
-
+#include "qemu-timer.h" //added by ayaz
 #include "host-utils.h"
 
 #include "helper.h"
@@ -100,7 +100,7 @@ void helper_raise_exception (uint32_t exception)
     helper_raise_exception_err(exception, 0);
 }
 
-#if !defined(CONFIG_USER_ONLY)
+/*#if !defined(CONFIG_USER_ONLY)
 static void do_restore_state (void *pc_ptr)
 {
     TranslationBlock *tb;
@@ -111,7 +111,7 @@ static void do_restore_state (void *pc_ptr)
         cpu_restore_state(tb, env, pc);
     }
 }
-#endif
+#endif*/
 
 #if defined(CONFIG_USER_ONLY)
 #define HELPER_LD(name, insn, type)                                     \
@@ -320,7 +320,69 @@ void helper_dmultu (target_ulong arg1, target_ulong arg2)
 {
     mulu64(&(env->active_tc.LO[0]), &(env->active_tc.HI[0]), arg1, arg2);
 }
+static void addc(uint64_t res[], uint64_t a, int i)
+{
+    uint64_t c = res[i];
+    for (; i < 4; i++) {
+        res[i] = c + a;
+        if (res[i] < a) {
+            c = 1;
+            a = res[i+1];
+        } else
+              break;
+    }
+}
+target_ulong helper_v3mulu(target_ulong arg1, target_ulong arg2)
+{
+    uint64_t hi, lo, res[4];
+    int i;
+    for (i = 0; i < 4; i++) {
+        res[i] = 0;
+    }
+    mulu64(&res[0], &res[1], env->active_tc.MPL0, arg1);
+    mulu64(&lo, &hi, env->active_tc.MPL1, arg1);
+    res[1] = res[1] + lo;
+    if (res[1] < lo)
+        res[2]++;
+    res[2] = res[2] + hi;
+    if (res[2] < hi)
+        res[3]++;
+    mulu64(&lo, &hi, env->active_tc.MPL2, arg1);
+    res[2] = res[2] + lo;
+    if (res[2] < lo)
+        res[3]++;
+    res[3] = res[3] + hi;
+    addc(res, arg2, 0);
+    addc(res, env->active_tc.P0, 0);
+    addc(res, env->active_tc.P1, 1);
+    addc(res, env->active_tc.P2, 2);
+    env->active_tc.P0 = res[1];
+    env->active_tc.P1 = res[2];
+    env->active_tc.P2 = res[3];
+    return res[0];
+}
+target_ulong helper_vmulu(target_ulong arg1, target_ulong arg2)
+{
+    uint64_t hi, lo;
+    mulu64(&lo, &hi, env->active_tc.MPL0, arg1);
+    lo = lo + arg2;
+    if (lo < arg2)
+        hi++;
+    lo = lo + env->active_tc.P0;
+    if (lo < env->active_tc.P0)
+        hi++;
+    env->active_tc.P0 = hi;
+    return lo;
+}
+target_ulong helper_dpop(target_ulong arg)
+{
+    return ctpop64(arg);
+}
 #endif
+target_ulong helper_pop(target_ulong arg)
+{
+    return ctpop32((uint32_t)arg);
+}
 
 #ifndef CONFIG_USER_ONLY
 
@@ -1043,6 +1105,17 @@ target_ulong helper_mfc0_count (void)
 {
     return (int32_t)cpu_mips_get_count(env);
 }
+/* function given below is added by ayaz*
+ *
+ */
+void helper_mfc0_CvmCount (void)
+{   //printf("\n hello \n");
+        uint64_t val= cpu_get_ticks()/10;  //if not divided by 10 guest's timer's frequency appears to be 10
+       // times higher e.g. sleep 100 goes for 10 s real sleep
+
+	env->CP0_CvmCount=val;
+	//return cpu_get_ticks();
+}
 
 target_ulong helper_mftc0_entryhi(void)
 {
@@ -1583,9 +1656,12 @@ void helper_mtc0_status (target_ulong arg1)
 
 void helper_mttc0_status(target_ulong arg1)
 {
+	fprintf(stderr,"\n*******helper_mttc0_status***********\n");
     int other_tc = env->CP0_VPEControl & (0xff << CP0VPECo_TargTC);
     CPUState *other = mips_cpu_map_tc(&other_tc);
+	fprintf(stderr,"\n*******helper_mttc0_status***********\n");
 
+	fprintf(stderr,"\n*******status register in cp_helper.c=%lx***********\n",(unsigned long) other->CP0_Status);
     other->CP0_Status = arg1 & ~0xf1000018;
     sync_c0_status(other, other_tc);
 }
@@ -2292,10 +2368,10 @@ void helper_wait (void)
 
 #if !defined(CONFIG_USER_ONLY)
 
-static void do_unaligned_access (target_ulong addr, int is_write, int is_user, void *retaddr);
+//static void do_unaligned_access (target_ulong addr, int is_write, int is_user, void *retaddr);
 
 #define MMUSUFFIX _mmu
-#define ALIGNED_ONLY
+//#define ALIGNED_ONLY
 
 #define SHIFT 0
 #include "softmmu_template.h"
@@ -2309,12 +2385,13 @@ static void do_unaligned_access (target_ulong addr, int is_write, int is_user, v
 #define SHIFT 3
 #include "softmmu_template.h"
 
-static void do_unaligned_access (target_ulong addr, int is_write, int is_user, void *retaddr)
+
+/*static void do_unaligned_access (target_ulong addr, int is_write, int is_user, void *retaddr)
 {
     env->CP0_BadVAddr = addr;
     do_restore_state (retaddr);
     helper_raise_exception ((is_write == 1) ? EXCP_AdES : EXCP_AdEL);
-}
+}*/
 
 void tlb_fill(CPUState *env1, target_ulong addr, int is_write, int mmu_idx,
               void *retaddr)

@@ -37,6 +37,7 @@
 #define DPRINTF(fmt, ...)
 #endif
 
+	#define DEBUG_IRQ_COUNT
 //#define DEBUG_IRQ_LATENCY
 //#define DEBUG_IRQ_COUNT
 
