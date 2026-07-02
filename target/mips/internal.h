@@ -8,6 +8,7 @@
 #ifndef MIPS_INTERNAL_H
 #define MIPS_INTERNAL_H
 
+#include "qemu/atomic.h"
 #include "exec/memattrs.h"
 #ifdef CONFIG_TCG
 #include "tcg/tcg-internal.h"
@@ -160,6 +161,20 @@ void sync_c0_status(CPUMIPSState *env, CPUMIPSState *cpu, int tc);
 void cpu_mips_store_status(CPUMIPSState *env, target_ulong val);
 void cpu_mips_store_cause(CPUMIPSState *env, target_ulong val);
 
+static inline int32_t cpu_mips_update_cause(CPUMIPSState *env,
+                                            int32_t mask, int32_t value)
+{
+    int32_t old;
+    int32_t new;
+
+    do {
+        old = qatomic_read(&env->CP0_Cause);
+        new = (old & ~mask) | (value & mask);
+    } while (qatomic_cmpxchg(&env->CP0_Cause, old, new) != old);
+
+    return old;
+}
+
 extern const VMStateDescription vmstate_mips_cpu;
 
 static inline bool cpu_mips_hw_interrupts_enabled(CPUMIPSState *env)
@@ -183,7 +198,7 @@ static inline bool cpu_mips_hw_interrupts_pending(CPUMIPSState *env)
     int32_t status;
     bool r;
 
-    pending = env->CP0_Cause & CP0Ca_IP_mask;
+    pending = qatomic_read(&env->CP0_Cause) & CP0Ca_IP_mask;
     status = env->CP0_Status & CP0Ca_IP_mask;
 
     if (env->CP0_Config3 & (1 << CP0C3_VEIC)) {

@@ -45,6 +45,8 @@
 #define TRB_LINK_LIMIT  32
 #define COMMAND_LIMIT   256
 #define TRANSFER_LIMIT  256
+/* xhci_event() needs two spare entries to avoid reporting ring full. */
+#define EVENT_RING_MIN_FREE 2
 
 #define LEN_CAP         0x40
 #define LEN_OPER        (0x400 + 0x10 * XHCI_MAXPORTS)
@@ -293,6 +295,8 @@ struct XHCIEPContext {
     unsigned int interval;
     int64_t mfindex_last;
     QEMUTimer *kick_timer;
+    bool event_ring_blocked;
+    unsigned int kick_streamid;
 };
 
 typedef struct XHCIEvRingSeg {
@@ -635,6 +639,78 @@ static void xhci_write_event(XHCIState *xhci, XHCIEvent *event, int v)
     if (intr->er_ep_idx >= intr->er_size) {
         intr->er_ep_idx = 0;
         intr->er_pcs = !intr->er_pcs;
+    }
+}
+
+static bool xhci_event_ring_has_room(XHCIState *xhci, int v)
+{
+    XHCIInterrupter *intr;
+    dma_addr_t erdp;
+    unsigned int dp_idx;
+    unsigned int used;
+    unsigned int free;
+
+    if (xhci->numintrs == 1 ||
+        (xhci->intr_mapping_supported && !xhci->intr_mapping_supported(xhci))) {
+        v = 0;
+    }
+
+    if (v >= xhci->numintrs) {
+        return true;
+    }
+
+    intr = &xhci->intr[v];
+    if (!intr->er_size) {
+        return true;
+    }
+
+    erdp = xhci_addr64(intr->erdp_low, intr->erdp_high);
+    if (erdp < intr->er_start ||
+        erdp >= (intr->er_start + TRB_SIZE * intr->er_size)) {
+        return true;
+    }
+
+    dp_idx = (erdp - intr->er_start) / TRB_SIZE;
+    if (intr->er_ep_idx >= dp_idx) {
+        used = intr->er_ep_idx - dp_idx;
+    } else {
+        used = intr->er_size - dp_idx + intr->er_ep_idx;
+    }
+    free = intr->er_size - used - 1;
+
+    return free > EVENT_RING_MIN_FREE;
+}
+
+static void xhci_kick_blocked_eps(XHCIState *xhci, int v)
+{
+    XHCIEPContext *epctx;
+    unsigned int slotid;
+    unsigned int epid;
+    unsigned int streamid;
+
+    if (xhci->numintrs == 1 ||
+        (xhci->intr_mapping_supported && !xhci->intr_mapping_supported(xhci))) {
+        v = 0;
+    }
+
+    for (slotid = 1; slotid <= xhci->numslots; slotid++) {
+        if (xhci->slots[slotid - 1].intr != v) {
+            continue;
+        }
+
+        for (epid = 1; epid <= 31; epid++) {
+            epctx = xhci->slots[slotid - 1].eps[epid - 1];
+            if (!epctx || !epctx->event_ring_blocked) {
+                continue;
+            }
+            if (!xhci_event_ring_has_room(xhci, v)) {
+                return;
+            }
+
+            streamid = epctx->kick_streamid;
+            epctx->event_ring_blocked = false;
+            xhci_kick_epctx(epctx, streamid);
+        }
     }
 }
 
@@ -1960,6 +2036,14 @@ static void xhci_kick_epctx(XHCIEPContext *epctx, unsigned int streamid)
 
     epctx->kick_active++;
     while (1) {
+        if (!xhci_event_ring_has_room(xhci,
+                xhci->slots[epctx->slotid - 1].intr)) {
+            trace_usb_xhci_enforced_limit("event-ring");
+            epctx->event_ring_blocked = true;
+            epctx->kick_streamid = streamid;
+            break;
+        }
+
         length = xhci_ring_chain_length(xhci, ring);
         if (length <= 0) {
             if (epctx->type == ET_ISO_OUT || epctx->type == ET_ISO_IN) {
@@ -3126,6 +3210,7 @@ static void xhci_runtime_write(void *ptr, hwaddr reg,
                 dp_idx != intr->er_ep_idx) {
                 xhci_intr_raise(xhci, v);
             }
+            xhci_kick_blocked_eps(xhci, v);
         }
         break;
     case 0x1c: /* ERDP high */
