@@ -180,6 +180,9 @@ const TCGCPUOps x86_tcg_ops = {
     .record_sigbus = x86_cpu_record_sigbus,
 #else
     .tlb_fill = x86_cpu_tlb_fill,
+    .mem_tracking_enabled = x86_dead_memory_enabled,
+    .mem_read = x86_dead_mem_read,
+    .mem_write = x86_dead_mem_write,
     .pointer_wrap = x86_pointer_wrap,
     .do_interrupt = x86_cpu_do_interrupt,
     .poll_during_halt = x86_cpu_poll_during_halt,

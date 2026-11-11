@@ -1316,6 +1316,11 @@ static const X86OpEntry opcodes_0F[256] = {
     [0x33] = X86_OP_ENTRY0(RDPMC),
     [0x34] = X86_OP_ENTRY0(SYSENTER,                          chk2(i64_amd, prot_or_vm86)),
     [0x35] = X86_OP_ENTRY0(SYSEXIT,                           chk3(i64_amd, prot, cpl0)),
+    [0x3b] = X86_OP_ENTRY0(DEADRESTORE),
+    [0x3c] = X86_OP_ENTRY0(DEADSAVE),
+    [0x3d] = X86_OP_ENTRY0(DEADCOPY),
+    [0x3e] = X86_OP_ENTRYr(DEADREG, nop,v, nolea),
+    [0x3f] = X86_OP_ENTRY0(DEADMEM),
 
     [0x40] = X86_OP_ENTRY2(CMOVcc,     G,v, E,v, cpuid(CMOV)),
     [0x41] = X86_OP_ENTRY2(CMOVcc,     G,v, E,v, cpuid(CMOV)),
@@ -2772,6 +2777,45 @@ static bool validate_sse_prefix(DisasContext *s, X86OpEntry *e)
     return e->valid_prefix & (1 << sse_prefixes);
 }
 
+static bool dead_supported_insn(DisasContext *s, X86DecodedInsn *decode)
+{
+    X86GenFunc gen = decode->e.gen;
+    int i;
+
+    if (!CODE64(s) ||
+        (s->prefix & (PREFIX_LOCK | PREFIX_VEX | PREFIX_EVEX | PREFIX_REX2))) {
+        return false;
+    }
+    for (i = 0; i < 3; i++) {
+        X86DecodedOp *op = &decode->op[i];
+
+        if (op->unit != X86_OP_SKIP && op->unit != X86_OP_INT &&
+            op->unit != X86_OP_IMM) {
+            return false;
+        }
+        if (op->unit == X86_OP_INT && op->ot > MO_64) {
+            return false;
+        }
+        if (gen == gen_MOV && op->has_ea && op->unit != X86_OP_INT) {
+            return false;
+        }
+    }
+    return gen == gen_DEADREG || gen == gen_DEADMEM ||
+           gen == gen_DEADCOPY || gen == gen_DEADSAVE ||
+           gen == gen_DEADRESTORE ||
+           gen == gen_MOV || gen == gen_LEA ||
+           gen == gen_ADD || gen == gen_ADC || gen == gen_SUB ||
+           gen == gen_SBB || gen == gen_AND || gen == gen_OR ||
+           gen == gen_XOR || gen == gen_CMP || gen == gen_TEST ||
+           gen == gen_INC || gen == gen_DEC || gen == gen_NEG ||
+           gen == gen_NOT || gen == gen_JMP || gen == gen_JMP_m ||
+           gen == gen_Jcc || gen == gen_IRET || gen == gen_OUT ||
+           gen == gen_CLC || gen == gen_STC || gen == gen_CMC ||
+           gen == gen_CLD || gen == gen_STD || gen == gen_CLI ||
+           gen == gen_STI || gen == gen_HLT || gen == gen_PAUSE ||
+           gen == gen_UD;
+}
+
 static bool decode_insn(DisasContext *s, CPUX86State *env, X86DecodeFunc decode_func,
                         X86DecodedInsn *decode)
 {
@@ -3661,6 +3705,10 @@ static void disas_insn(DisasContext *s, CPUState *cpu)
 
     if ((s->prefix & PREFIX_LOCK) && !accept_lock) {
         goto illegal_op;
+    }
+
+    if (s->dead_enabled && !dead_supported_insn(s, &decode)) {
+        gen_helper_dead_guard(tcg_env);
     }
 
     /*

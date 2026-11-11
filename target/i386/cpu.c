@@ -7422,6 +7422,32 @@ static const TypeInfo max_x86_cpu_type_info = {
     .class_init = max_x86_cpu_class_init,
 };
 
+#if defined(TARGET_X86_64) && !defined(CONFIG_USER_ONLY)
+static void dead64_x86_cpu_initfn(Object *obj)
+{
+    X86_CPU(obj)->dead_memory = true;
+    object_property_set_str(obj, "model-id",
+                            "QEMU experimental AMD64 dead-state CPU",
+                            &error_abort);
+}
+
+static void dead64_x86_cpu_class_init(ObjectClass *oc, const void *data)
+{
+    X86CPUClass *xcc = X86_CPU_CLASS(oc);
+
+    xcc->ordering = 10;
+    xcc->model_description =
+        "Experimental AMD64 CPU with dead-state tracking (TCG only)";
+}
+
+static const TypeInfo dead64_x86_cpu_type_info = {
+    .name = X86_CPU_TYPE_NAME("dead64"),
+    .parent = X86_CPU_TYPE_NAME("max"),
+    .instance_init = dead64_x86_cpu_initfn,
+    .class_init = dead64_x86_cpu_class_init,
+};
+#endif
+
 static char *feature_word_description(FeatureWordInfo *f)
 {
     assert(f->type == CPUID_FEATURE_WORD || f->type == MSR_FEATURE_WORD);
@@ -9417,6 +9443,9 @@ static void x86_cpu_reset_hold(Object *obj, ResetType type)
         xcc->parent_phases.hold(obj, type);
     }
 
+#if defined(CONFIG_TCG) && !defined(CONFIG_USER_ONLY)
+    x86_dead_transfer_cleanup(cpu);
+#endif
     memset(env, 0, offsetof(CPUX86State, end_reset_fields));
 
     if (tcg_enabled()) {
@@ -10127,6 +10156,19 @@ static void x86_cpu_realizefn(DeviceState *dev, Error **errp)
     Error *local_err = NULL;
     unsigned requested_lbr_fmt;
 
+    if (cpu->dead_memory) {
+        if (!tcg_enabled()) {
+            error_setg(errp, "dead64 requires TCG");
+            return;
+        }
+#ifdef CONFIG_USER_ONLY
+        error_setg(errp, "dead64 requires system emulation");
+        return;
+#elif defined(CONFIG_TCG)
+        x86_dead_memory_init(cpu);
+#endif
+    }
+
 #if defined(CONFIG_TCG) && !defined(CONFIG_USER_ONLY)
     /* Use pc-relative instructions in system-mode */
     tcg_cflags_set(cs, CF_PCREL);
@@ -10418,6 +10460,9 @@ static void x86_cpu_unrealizefn(DeviceState *dev)
         cpu->apic_state = NULL;
     }
 
+#if defined(CONFIG_TCG) && !defined(CONFIG_USER_ONLY)
+    x86_dead_transfer_cleanup(cpu);
+#endif
     xcc->parent_unrealize(dev);
 }
 
@@ -11098,6 +11143,9 @@ static void x86_cpu_register_types(void)
         x86_register_cpudef_types(&builtin_x86_defs[i]);
     }
     type_register_static(&max_x86_cpu_type_info);
+#if defined(TARGET_X86_64) && !defined(CONFIG_USER_ONLY)
+    type_register_static(&dead64_x86_cpu_type_info);
+#endif
     type_register_static(&x86_base_cpu_type_info);
 }
 

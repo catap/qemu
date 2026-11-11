@@ -2,6 +2,7 @@ i386_ss.add(when: 'CONFIG_TCG', if_true: files(
   'access.c',
   'bpt_helper.c',
   'cc_helper.c',
+  'dead_helper.c',
   'excp_helper.c',
   'fpu_helper.c',
   'int_helper.c',

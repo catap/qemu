@@ -37,6 +37,15 @@ enum device_endian {
 
 #define RAM_ADDR_INVALID (~(ram_addr_t)0)
 
+typedef struct MemoryRAMWrite {
+    ram_addr_t addr;
+    hwaddr size;
+} MemoryRAMWrite;
+
+/* Callbacks run after RAM writes and cannot change notifier registration. */
+void memory_ram_write_notifier_add(Notifier *notifier);
+void memory_ram_write_notifier_remove(Notifier *notifier);
+
 #define TYPE_MEMORY_REGION "memory-region"
 DECLARE_INSTANCE_CHECKER(MemoryRegion, MEMORY_REGION,
                          TYPE_MEMORY_REGION)

@@ -160,6 +160,38 @@ static void tcg_log_global_after_sync(MemoryListener *listener);
 static void tcg_commit(MemoryListener *listener);
 static bool ram_is_cpr_compatible(RAMBlock *rb);
 
+static NotifierList ram_write_notifiers =
+    NOTIFIER_LIST_INITIALIZER(ram_write_notifiers);
+static QemuMutex ram_write_lock;
+static unsigned ram_write_notifier_count;
+
+void memory_ram_write_notifier_add(Notifier *notifier)
+{
+    qemu_mutex_lock(&ram_write_lock);
+    notifier_list_add(&ram_write_notifiers, notifier);
+    qatomic_inc(&ram_write_notifier_count);
+    qemu_mutex_unlock(&ram_write_lock);
+}
+
+void memory_ram_write_notifier_remove(Notifier *notifier)
+{
+    qemu_mutex_lock(&ram_write_lock);
+    notifier_remove(notifier);
+    qatomic_dec(&ram_write_notifier_count);
+    qemu_mutex_unlock(&ram_write_lock);
+}
+
+static void memory_ram_write_notify(ram_addr_t addr, hwaddr size)
+{
+    MemoryRAMWrite write = { .addr = addr, .size = size };
+
+    if (size && qatomic_read(&ram_write_notifier_count)) {
+        qemu_mutex_lock(&ram_write_lock);
+        notifier_list_notify(&ram_write_notifiers, &write);
+        qemu_mutex_unlock(&ram_write_lock);
+    }
+}
+
 /**
  * CPUAddressSpace: all the information a CPU needs about an AddressSpace
  * @cpu: the CPU whose AddressSpace this is
@@ -3108,6 +3140,7 @@ static void tcg_commit(MemoryListener *listener)
 
 static void memory_map_init(void)
 {
+    qemu_mutex_init(&ram_write_lock);
     system_memory = g_malloc(sizeof(*system_memory));
 
     memory_region_init(system_memory, NULL, "system", UINT64_MAX);
@@ -3153,6 +3186,7 @@ static void invalidate_and_set_dirty(MemoryRegion *mr, hwaddr addr,
         dirty_log_mask &= ~(1 << DIRTY_MEMORY_CODE);
     }
     physical_memory_set_dirty_range(addr, length, dirty_log_mask);
+    memory_ram_write_notify(addr, length);
 }
 
 void memory_region_flush_rom_device(MemoryRegion *mr, hwaddr addr, hwaddr size)

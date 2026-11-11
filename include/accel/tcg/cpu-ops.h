@@ -21,6 +21,7 @@
 #include "exec/mmu-access-type.h"
 #include "exec/vaddr.h"
 #include "accel/tcg/tb-cpu-state.h"
+#include "system/ram_addr.h"
 #include "tcg/tcg-mo.h"
 
 struct TCGCPUOps {
@@ -169,6 +170,26 @@ struct TCGCPUOps {
      */
     vaddr (*untagged_addr)(CPUState *cs, vaddr addr);
 #else
+    /**
+     * @mem_tracking_enabled: Route RAM data accesses through memory hooks.
+     * @mmu_idx: MMU context of the mapping.
+     * Changes to the result require a TLB flush.
+     */
+    bool (*mem_tracking_enabled)(CPUState *cpu, int mmu_idx);
+
+    /**
+     * @mem_read: Check a RAM data read before consuming any bytes.
+     * @ram_addr identifies RAM backing, including through guest aliases.
+     * The callback may raise an exception using @ra.
+     */
+    void (*mem_read)(CPUState *cpu, vaddr addr, ram_addr_t ram_addr,
+                     unsigned size, uintptr_t ra);
+
+    /**
+     * @mem_write: Record a completed RAM data write. Must not raise.
+     */
+    void (*mem_write)(CPUState *cpu, ram_addr_t ram_addr, unsigned size);
+
     /**
      * @poll_during_halt: Poll target-specific events while the CPU is halted.
      * @cpu: vCPU context

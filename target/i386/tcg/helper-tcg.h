@@ -21,6 +21,7 @@
 #define I386_HELPER_TCG_H
 
 #include "qemu/host-utils.h"
+#include "system/ram_addr.h"
 
 /* Maximum instruction code size */
 #define TARGET_MAX_INSN_SIZE 16
@@ -37,6 +38,12 @@
  */
 void x86_cpu_do_interrupt(CPUState *cpu);
 #ifndef CONFIG_USER_ONLY
+void x86_dead_memory_init(X86CPU *cpu);
+void x86_dead_transfer_cleanup(X86CPU *cpu);
+bool x86_dead_memory_enabled(CPUState *cpu, int mmu_idx);
+void x86_dead_mem_read(CPUState *cpu, vaddr addr, ram_addr_t ram_addr,
+                       unsigned size, uintptr_t ra);
+void x86_dead_mem_write(CPUState *cpu, ram_addr_t ram_addr, unsigned size);
 void x86_cpu_poll_during_halt(CPUState *cpu);
 void x86_cpu_leaving_halt(CPUState *cpu);
 bool x86_need_replay_interrupt(int interrupt_request);

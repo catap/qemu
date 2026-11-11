@@ -119,6 +119,7 @@ typedef struct DisasContext {
     uint8_t evex4;
     bool jmp_opt; /* use direct block chaining for direct jumps */
     bool cc_op_dirty;
+    bool dead_enabled;
 
     CCOp cc_op;  /* current CC operation */
     int mem_index; /* select memory access functions */
@@ -423,6 +424,39 @@ static inline MemOp mo_pushpop(DisasContext *s, MemOp ot)
 static inline MemOp mo_stacksize(DisasContext *s)
 {
     return CODE64(s) ? MO_64 : SS32(s) ? MO_32 : MO_16;
+}
+
+static unsigned dead_reg_mask(DisasContext *s, MemOp ot, int *reg)
+{
+    assert(ot <= MO_64);
+    if (ot == MO_8 && byte_reg_is_xH(s, *reg)) {
+        *reg -= 4;
+        return 2;
+    }
+    return (1u << (1u << ot)) - 1;
+}
+
+static void gen_dead_check_reg(DisasContext *s, MemOp ot, int reg)
+{
+    if (s->dead_enabled) {
+        unsigned mask = dead_reg_mask(s, ot, &reg);
+
+        gen_helper_dead_check_reg(tcg_env, tcg_constant_i32(reg),
+                                  tcg_constant_i32(mask));
+    }
+}
+
+static void gen_dead_clear_reg(DisasContext *s, MemOp ot, int reg)
+{
+    if (s->dead_enabled) {
+        unsigned mask = dead_reg_mask(s, ot, &reg);
+
+        if (ot == MO_32) {
+            mask = 0xff;
+        }
+        gen_helper_dead_clear_reg(tcg_env, tcg_constant_i32(reg),
+                                  tcg_constant_i32(mask));
+    }
 }
 
 /* Compute the result of writing t0 to the OT-sized register REG.
@@ -1704,6 +1738,13 @@ static TCGv gen_shiftd_rm_T1(DisasContext *s, MemOp ot,
 static TCGv gen_lea_modrm_1(DisasContext *s, AddressParts a, bool is_vsib)
 {
     TCGv ea = (a.base >= 0 ? cpu_regs[a.base] : NULL);
+
+    if (a.base >= 0) {
+        gen_dead_check_reg(s, s->aflag, a.base);
+    }
+    if (a.index >= 0 && !is_vsib) {
+        gen_dead_check_reg(s, s->aflag, a.index);
+    }
 
     if (a.index >= 0 && !is_vsib) {
         TCGv index = cpu_regs[a.index];
@@ -3545,6 +3586,11 @@ static void i386_tr_init_disas_context(DisasContextBase *dcbase, CPUState *cpu)
 
     dc->cc_op = CC_OP_DYNAMIC;
     dc->cc_op_dirty = false;
+#if defined(CONFIG_USER_ONLY) || !defined(TARGET_X86_64)
+    dc->dead_enabled = false;
+#else
+    dc->dead_enabled = X86_CPU(cpu)->dead_memory;
+#endif
     /* select memory access functions */
     dc->mem_index = cpu_mmu_index(cpu, false);
     dc->cpuid_features = env->features[FEAT_1_EDX];

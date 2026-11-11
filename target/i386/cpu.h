@@ -37,6 +37,12 @@
 
 #define XEN_NR_VIRQS 24
 
+enum {
+    DEAD64_COPY_MEMORY,
+    DEAD64_SAVE_MEMORY,
+    DEAD64_RESTORE_MEMORY,
+};
+
 #ifdef TARGET_X86_64
 #define I386_ELF_MACHINE  EM_X86_64
 #define ELF_MACHINE_UNAME "x86_64"
@@ -2005,6 +2011,7 @@ struct hv_vp_register_page;
 typedef struct CPUArchState {
     /* standard registers */
     target_ulong regs[CPU_NB_EREGS];
+    uint8_t dead_regs[CPU_NB_EREGS];
     target_ulong eip;
     target_ulong eflags; /* eflags register. During CPU emulation, CC
                         flags and DF are set to zero because they are
@@ -2366,6 +2373,9 @@ struct ArchCPU {
     CPUState parent_obj;
 
     CPUX86State env;
+    bool dead_memory;
+    struct X86DeadMemoryState *dead_memory_state;
+    struct DeadMemoryTransfer *dead_transfer;
     bool eflags_in_tcg;
     VMChangeStateEntry *vmsentry;
 

@@ -243,6 +243,9 @@ static void gen_load(DisasContext *s, X86DecodedInsn *decode, int opn, TCGv v)
 {
     X86DecodedOp *op = &decode->op[opn];
 
+    if (op->unit == X86_OP_INT && !op->has_ea) {
+        gen_dead_check_reg(s, op->ot, op->n);
+    }
     switch (op->unit) {
     case X86_OP_SKIP:
         return;
@@ -353,6 +356,11 @@ static void gen_writeback(DisasContext *s, X86DecodedInsn *decode, int opn, TCGv
             }
         } else {
             gen_op_mov_reg_v(s, op->ot, op->n, v);
+        }
+        if (!op->has_ea) {
+            MemOp ot = op->ext == X86_EXT_None ? op->ot : MO_TL;
+
+            gen_dead_clear_reg(s, ot, op->n);
         }
         break;
     case X86_OP_MMX:
@@ -2141,6 +2149,66 @@ static void gen_DAS(DisasContext *s, X86DecodedInsn *decode)
     assume_cc_op(s, CC_OP_EFLAGS);
 }
 
+static void gen_DEADREG(DisasContext *s, X86DecodedInsn *decode)
+{
+    int reg = (s->modrm & 7) | REX_B(s);
+
+    if (!s->dead_enabled || !CODE64(s) ||
+        (s->prefix & ~PREFIX_REX) || (s->modrm & 0xf8) != 0xc0 ||
+        REX_R(s) || REX_X(s)) {
+        gen_illegal_opcode(s);
+        return;
+    }
+    if (reg == R_ESP) {
+        gen_exception_gpf(s);
+        return;
+    }
+    gen_helper_dead_mark_reg(tcg_env, tcg_constant_i32(reg),
+                             tcg_constant_i32(0xff));
+}
+
+static void gen_DEADMEM(DisasContext *s, X86DecodedInsn *decode)
+{
+    if (!s->dead_enabled || !CODE64(s) || s->prefix) {
+        gen_illegal_opcode(s);
+        return;
+    }
+    gen_dead_check_reg(s, MO_64, R_EDI);
+    gen_dead_check_reg(s, MO_64, R_ECX);
+    gen_helper_dead_memory(tcg_env);
+}
+
+static void gen_dead_transfer(DisasContext *s, uint32_t operation)
+{
+    if (!s->dead_enabled || !CODE64(s) || s->prefix) {
+        gen_illegal_opcode(s);
+        return;
+    }
+    if (CPL(s) != 0) {
+        gen_exception_gpf(s);
+        return;
+    }
+    gen_dead_check_reg(s, MO_64, R_EDI);
+    gen_dead_check_reg(s, MO_64, R_ESI);
+    gen_dead_check_reg(s, MO_64, R_ECX);
+    gen_helper_dead_transfer(tcg_env, tcg_constant_i32(operation));
+}
+
+static void gen_DEADCOPY(DisasContext *s, X86DecodedInsn *decode)
+{
+    gen_dead_transfer(s, DEAD64_COPY_MEMORY);
+}
+
+static void gen_DEADSAVE(DisasContext *s, X86DecodedInsn *decode)
+{
+    gen_dead_transfer(s, DEAD64_SAVE_MEMORY);
+}
+
+static void gen_DEADRESTORE(DisasContext *s, X86DecodedInsn *decode)
+{
+    gen_dead_transfer(s, DEAD64_RESTORE_MEMORY);
+}
+
 static void gen_DEC(DisasContext *s, X86DecodedInsn *decode)
 {
     MemOp ot = decode->op[1].ot;
@@ -2442,12 +2510,14 @@ static void gen_INTO(DisasContext *s, X86DecodedInsn *decode)
 
 static void gen_IRET(DisasContext *s, X86DecodedInsn *decode)
 {
+    gen_dead_check_reg(s, mo_stacksize(s), R_ESP);
     if (!PE(s) || VM86(s)) {
         gen_helper_iret_real(tcg_env, tcg_constant_i32(s->dflag - 1));
     } else {
         gen_helper_iret_protected(tcg_env, tcg_constant_i32(s->dflag - 1),
                                   eip_next_i32(s));
     }
+    gen_dead_clear_reg(s, mo_stacksize(s), R_ESP);
     assume_cc_op(s, CC_OP_EFLAGS);
     s->base.is_jmp = DISAS_EOB_ONLY;
 }

@@ -222,6 +222,11 @@ static int cpu_pre_save(void *opaque)
     X86CPU *cpu = opaque;
     CPUX86State *env = &cpu->env;
     int i;
+
+    if (cpu->dead_memory) {
+        error_report("dead64 does not support migration or snapshots");
+        return -ENOTSUP;
+    }
     env->v_tpr = env->int_ctl & V_TPR_MASK;
     /* FPU */
     env->fpus_vmstate = (env->fpus & ~0x3800) | (env->fpstt & 0x7) << 11;

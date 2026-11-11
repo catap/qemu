@@ -77,7 +77,7 @@ static void *access_ptr(X86Access *ac, vaddr addr, unsigned len)
      * Only return ac->haddr2 if the area is entirely within the second page,
      * otherwise fall back to slow accesses.
      */
-    if (likely(offset >= ac->size1)) {
+    if (likely(offset >= ac->size1 && ac->haddr2)) {
         return ac->haddr2 + (offset - ac->size1);
     }
     return NULL;

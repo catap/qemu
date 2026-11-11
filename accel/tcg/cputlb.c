@@ -1164,6 +1164,12 @@ void tlb_set_page_full(CPUState *cpu, int mmu_idx,
     tlb_set_compare(full, &tn, addr_page, read_flags,
                     MMU_INST_FETCH, prot & PAGE_EXEC);
 
+    if (is_ram && cpu->cc->tcg_ops->mem_tracking_enabled &&
+        cpu->cc->tcg_ops->mem_tracking_enabled(cpu, mmu_idx)) {
+        read_flags |= TLB_MEMTRACK;
+        write_flags |= TLB_MEMTRACK;
+    }
+
     if (wp_flags & BP_MEM_READ) {
         read_flags |= TLB_WATCHPOINT;
     }
@@ -1711,6 +1717,22 @@ static void mmu_watch_or_dirty(CPUState *cpu, MMULookupPageData *data,
     data->flags = flags;
 }
 
+static void mmu_mem_read(CPUState *cpu, MMULookupPageData *p, uintptr_t ra)
+{
+    if (unlikely(p->flags & TLB_MEMTRACK)) {
+        cpu->cc->tcg_ops->mem_read(cpu, p->addr,
+                                  p->full->xlat_offset + p->addr,
+                                  p->size, ra);
+    }
+}
+
+static void mmu_mem_write(CPUState *cpu, MMULookupPageData *p, unsigned size)
+{
+    if (unlikely(p->flags & TLB_MEMTRACK)) {
+        cpu->cc->tcg_ops->mem_write(cpu, p->full->xlat_offset + p->addr, size);
+    }
+}
+
 /**
  * mmu_lookup: translate page(s)
  * @cpu: generic cpu state
@@ -1784,6 +1806,13 @@ static bool mmu_lookup(CPUState *cpu, vaddr addr, MemOpIdx oi,
          * would be arbitrary.  Refuse it until there's a use.
          */
         tcg_debug_assert((flags & TLB_BSWAP) == 0);
+    }
+
+    if (type == MMU_DATA_LOAD) {
+        mmu_mem_read(cpu, &l->page[0], ra);
+        if (crosspage) {
+            mmu_mem_read(cpu, &l->page[1], ra);
+        }
     }
 
     return crosspage;
@@ -1891,6 +1920,11 @@ static void *atomic_mmu_lookup(CPUState *cpu, vaddr addr, MemOpIdx oi,
         }
         cpu_check_watchpoint(cpu, addr, size,
                              full->attrs, wp_flags, retaddr);
+    }
+
+    if (unlikely(tlb_addr & TLB_MEMTRACK)) {
+        cpu->cc->tcg_ops->mem_read(cpu, addr, full->xlat_offset + addr,
+                                  size, retaddr);
     }
 
     return hostaddr;
@@ -2525,6 +2559,7 @@ static uint64_t do_st_leN(CPUState *cpu, MMULookupPageData *p,
 {
     MemOp atom;
     unsigned tmp, half_size;
+    uint64_t ret;
 
     if (unlikely(p->flags & TLB_MMIO)) {
         return do_st_mmio_leN(cpu, p->full, val_le, p->addr,
@@ -2540,7 +2575,8 @@ static uint64_t do_st_leN(CPUState *cpu, MMULookupPageData *p,
     atom = mop & MO_ATOM_MASK;
     switch (atom) {
     case MO_ATOM_SUBALIGN:
-        return store_parts_leN(p->haddr, p->size, val_le);
+        ret = store_parts_leN(p->haddr, p->size, val_le);
+        break;
 
     case MO_ATOM_IFALIGN_PAIR:
     case MO_ATOM_WITHIN16_PAIR:
@@ -2550,18 +2586,23 @@ static uint64_t do_st_leN(CPUState *cpu, MMULookupPageData *p,
         if (atom == MO_ATOM_IFALIGN_PAIR
             ? p->size == half_size
             : p->size >= half_size) {
-            return store_whole_le8(p->haddr, p->size, val_le);
+            ret = store_whole_le8(p->haddr, p->size, val_le);
+            break;
         }
         /* fall through */
 
     case MO_ATOM_IFALIGN:
     case MO_ATOM_WITHIN16:
     case MO_ATOM_NONE:
-        return store_bytes_leN(p->haddr, p->size, val_le);
+        ret = store_bytes_leN(p->haddr, p->size, val_le);
+        break;
 
     default:
         g_assert_not_reached();
     }
+
+    mmu_mem_write(cpu, p, p->size);
+    return ret;
 }
 
 /*
@@ -2573,6 +2614,7 @@ static uint64_t do_st16_leN(CPUState *cpu, MMULookupPageData *p,
 {
     int size = p->size;
     MemOp atom;
+    uint64_t ret;
 
     if (unlikely(p->flags & TLB_MMIO)) {
         return do_st16_mmio_leN(cpu, p->full, val_le, p->addr,
@@ -2589,15 +2631,17 @@ static uint64_t do_st16_leN(CPUState *cpu, MMULookupPageData *p,
     switch (atom) {
     case MO_ATOM_SUBALIGN:
         store_parts_leN(p->haddr, 8, int128_getlo(val_le));
-        return store_parts_leN(p->haddr + 8, p->size - 8,
-                               int128_gethi(val_le));
+        ret = store_parts_leN(p->haddr + 8, p->size - 8,
+                              int128_gethi(val_le));
+        break;
 
     case MO_ATOM_WITHIN16_PAIR:
         /* Since size > 8, this is the half that must be atomic. */
         if (!HAVE_CMPXCHG128) {
             cpu_loop_exit_atomic(cpu, ra);
         }
-        return store_whole_le16(p->haddr, p->size, val_le);
+        ret = store_whole_le16(p->haddr, p->size, val_le);
+        break;
 
     case MO_ATOM_IFALIGN_PAIR:
         /*
@@ -2608,12 +2652,16 @@ static uint64_t do_st16_leN(CPUState *cpu, MMULookupPageData *p,
     case MO_ATOM_WITHIN16:
     case MO_ATOM_NONE:
         stq_le_p(p->haddr, int128_getlo(val_le));
-        return store_bytes_leN(p->haddr + 8, p->size - 8,
-                               int128_gethi(val_le));
+        ret = store_bytes_leN(p->haddr + 8, p->size - 8,
+                              int128_gethi(val_le));
+        break;
 
     default:
         g_assert_not_reached();
     }
+
+    mmu_mem_write(cpu, p, size);
+    return ret;
 }
 
 static void do_st_1(CPUState *cpu, MMULookupPageData *p, uint8_t val,
@@ -2625,6 +2673,7 @@ static void do_st_1(CPUState *cpu, MMULookupPageData *p, uint8_t val,
         /* nothing */
     } else {
         *(uint8_t *)p->haddr = val;
+        mmu_mem_write(cpu, p, 1);
     }
 }
 
@@ -2644,6 +2693,7 @@ static void do_st_2(CPUState *cpu, MMULookupPageData *p, uint16_t val,
             val = bswap16(val);
         }
         store_atom_2(cpu, ra, p->haddr, memop, val);
+        mmu_mem_write(cpu, p, 2);
     }
 }
 
@@ -2663,6 +2713,7 @@ static void do_st_4(CPUState *cpu, MMULookupPageData *p, uint32_t val,
             val = bswap32(val);
         }
         store_atom_4(cpu, ra, p->haddr, memop, val);
+        mmu_mem_write(cpu, p, 4);
     }
 }
 
@@ -2682,6 +2733,7 @@ static void do_st_8(CPUState *cpu, MMULookupPageData *p, uint64_t val,
             val = bswap64(val);
         }
         store_atom_8(cpu, ra, p->haddr, memop, val);
+        mmu_mem_write(cpu, p, 8);
     }
 }
 
@@ -2787,6 +2839,7 @@ static void do_st16_mmu(CPUState *cpu, vaddr addr, Int128 val,
                 val = bswap128(val);
             }
             store_atom_16(cpu, ra, l.page[0].haddr, l.memop, val);
+            mmu_mem_write(cpu, &l.page[0], 16);
         }
         return;
     }

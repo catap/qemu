@@ -554,6 +554,8 @@ void cpu_exec_step_atomic(CPUState *cpu)
     TranslationBlock *tb;
     int tb_exit;
 
+    RCU_READ_LOCK_GUARD();
+
     if (sigsetjmp(cpu->jmp_env, 0) == 0) {
         start_exclusive();
         g_assert(cpu == current_cpu);
